@@ -27,7 +27,7 @@ class CURAttention(nn.Module):
         elif new_select_type == "abs":
             self.absolute = True
 
-        if self.select_type = "causal:
+        if self.select_type == "causal":
             self.func_q_select = self.q_causal_selection
             self.func_k_select = self.k_causal_selection
             self.func_u_select = self.causal_matrix_composition
@@ -65,7 +65,7 @@ class CURAttention(nn.Module):
 
         if N2 < select_number:
             N2 = select_number
-    
+
         pas = N2 // select_number
 
         imax = pas * select_number
@@ -93,7 +93,7 @@ class CURAttention(nn.Module):
 
         if mask is not None:
             somme = somme.masked_fill(~mask, -torch.finfo(somme.dtype).max)
-            
+
         top = torch.topk(input=somme, k=select_number-1,
                          dim=-1).indices + 1
         top = torch.cat(
@@ -165,9 +165,9 @@ class CURAttention(nn.Module):
         r = nr @ K.transpose(-1, -2)
 
         r = r.masked_fill(
-                mask[:, None, None, :].to(torch.bool),
-                mask_value
-            )
+            mask[:, None, None, :].to(torch.bool),
+            mask_value
+        )
 
         kernel_1 = torch.nn.functional.softmax(
             c, dim=-1
