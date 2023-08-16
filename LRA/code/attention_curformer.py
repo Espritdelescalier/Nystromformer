@@ -167,7 +167,7 @@ class CURAttention(nn.Module):
 
         r = r.masked_fill(
             mask[:, None, None, :].to(torch.bool),
-            mask_value
+            -torch.finfo(q.dtype).max
         )
 
         kernel_1 = torch.nn.functional.softmax(
