@@ -22,9 +22,9 @@ class CURAttention(nn.Module):
             #self.init_option = "original"
             self.init_option = "new"
 
-        if new_select_type == "sum":
+        if self.select_type == "sum":
             self.absolute = False
-        elif new_select_type == "abs":
+        elif self.select_type == "abs":
             self.absolute = True
 
         if self.select_type == "causal":
@@ -89,10 +89,11 @@ class CURAttention(nn.Module):
             somme = torch.rand(B, H, N-1, device=device)
         else:
             somme = torch.sum(
-                (matrix_metric.abs() if self.absolute else matrix_metric), -1)
-
+                    (T[:, :, 1:, :].abs() if self.absolute else T[:, :, 1:, :]), -1)
+            
         if mask is not None:
-            somme = somme.masked_fill(~mask, -torch.finfo(somme.dtype).max)
+            somme = somme.masked_fill(
+                    mask[:, :, 1:], -torch.finfo(somme.dtype).max)
 
         top = torch.topk(input=somme, k=select_number-1,
                          dim=-1).indices + 1
@@ -172,7 +173,7 @@ class CURAttention(nn.Module):
         kernel_1 = torch.nn.functional.softmax(
             c, dim=-1
         )
-        u = self.m_matrix_composition(kernel_1, r_index)
+        u = self.func_u_select(kernel_1, r_index)
         kernel_3 = torch.nn.functional.softmax(
             r, dim=-1
         )
