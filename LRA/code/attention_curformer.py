@@ -19,7 +19,62 @@ class CURAttention(nn.Module):
         if "inv_coeff_init_option" in config:
             self.init_option = config["inv_init_coeff_option"]
         else:
-            self.init_option = "original"
+            #self.init_option = "original"
+            self.init_option = "new"
+
+        if new_select_type == "sum":
+            self.absolute = False
+        elif new_select_type == "abs":
+            self.absolute = True
+
+        if self.select_type = "causal:
+            self.func_q_select = self.q_causal_selection
+            self.func_k_select = self.k_causal_selection
+            self.func_u_select = self.causal_matrix_composition
+        else:
+            self.func_q_select = self.top_k_sum_selection
+            self.func_k_select = self.top_k_sum_selection
+            self.func_u_select = self.m_matrix_composition
+
+    def q_causal_selection(self, T, select_number, mask=None):
+        B, H, N, D = T.shape
+        if N < select_number:
+            select_number = N
+
+        N2 = N
+
+        if N2 < select_number:
+            N2 = select_number
+
+        pas = N2 // select_number
+
+        imax = pas * select_number
+
+        nt = T[:, :, 0:imax:pas, :]
+
+        index = None
+
+        return nt, index
+
+    def k_causal_selection(self, T, select_number, mask=None):
+        B, H, N, D = T.shape
+        if N < select_number:
+            select_number = N
+
+        N2 = N
+
+        if N2 < select_number:
+            N2 = select_number
+    
+        pas = N2 // select_number
+
+        imax = pas * select_number
+
+        nt = T[:, :, 0:imax:pas, :]
+
+        index = None
+
+        return nt, index
 
     def top_k_sum_selection(self, T, select_number, mask=None):
         B, H, N, D = T.shape
@@ -32,9 +87,13 @@ class CURAttention(nn.Module):
             somme = T[:, :, 1:, 0]
         elif self.select_type == "random":
             somme = torch.rand(B, H, N-1, device=device)
+        else:
+            somme = torch.sum(
+                (matrix_metric.abs() if self.absolute else matrix_metric), -1)
 
-        '''if mask is not None:
-            somme = somme.masked_fill(~mask, -torch.finfo(somme.dtype).max)'''
+        if mask is not None:
+            somme = somme.masked_fill(~mask, -torch.finfo(somme.dtype).max)
+            
         top = torch.topk(input=somme, k=select_number-1,
                          dim=-1).indices + 1
         top = torch.cat(
@@ -52,6 +111,20 @@ class CURAttention(nn.Module):
         nt = einops.rearrange(nt, '(b h n) d -> b h n d',
                               b=B, h=H, n=select_number)
         return nt, index
+
+    def causal_matrix_composition(self, C, R_indexes):
+        B, H, N, M = C.shape
+
+        N2 = N
+
+        if N2 < M:
+            N2 = M
+
+        pas = N2 // M
+
+        imax = pas * M
+
+        return C[:, :, 0:imax:pas, :]
 
     def m_matrix_composition(self, C, R_indexes):
         B, H, N, M = C.shape
@@ -72,27 +145,38 @@ class CURAttention(nn.Module):
 
     def forward(self, Q, K, V, mask):
 
-        #Q = Q * mask[:, None, :, None] / math.sqrt(math.sqrt(self.head_dim))
-        #K = K * mask[:, None, :, None] / math.sqrt(math.sqrt(self.head_dim))
+        Q = Q / math.sqrt(math.sqrt(self.head_dim))
+        #K = K * mask[:, None, :, None]
 
-        nc, c_index = self.top_k_sum_selection(
+        #dot = torch.matmul(Q, torch.transpose(K, -2, -1))
+        #dot = dot / math.sqrt(self.head_dim)
+        #dot = dot - 1e6 * (1 - mask[:, None, None, :])
+
+        #attn = nn.functional.softmax(dot, dim=-1)
+        #attn = self.drop_attn(attn)
+
+        #X = torch.matmul(attn, V)
+
+        nc, c_index = self.func_k_select(
             T=K, select_number=self.select_number, mask=mask)
-        nr, r_index = self.top_k_sum_selection(
+        nr, r_index = self.func_q_select(
             T=Q, select_number=self.select_number, mask=mask)
         c = Q @ nc.transpose(-1, -2)
         r = nr @ K.transpose(-1, -2)
-        m = self.m_matrix_composition(c, r_index)
+
+        r = r.masked_fill(
+                mask[:, None, None, :].to(torch.bool),
+                mask_value
+            )
 
         kernel_1 = torch.nn.functional.softmax(
             c, dim=-1
         )
-        kernel_2 = torch.nn.functional.softmax(
-            m, dim=-1
-        )
+        u = self.m_matrix_composition(kernel_1, r_index)
         kernel_3 = torch.nn.functional.softmax(
             r, dim=-1
         )
-        kernel_2_inv = self.iterative_inv(kernel_2)
+        kernel_2_inv = self.iterative_inv(u)
         X = torch.matmul(kernel_1, kernel_2_inv)
         X = torch.matmul(X, torch.matmul(kernel_3, V))
 
