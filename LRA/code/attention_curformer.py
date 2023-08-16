@@ -93,7 +93,7 @@ class CURAttention(nn.Module):
             
         if mask is not None:
             somme = somme.masked_fill(
-                    mask[:, :, 1:], -torch.finfo(somme.dtype).max)
+                    mask[:, None, 1:], -torch.finfo(somme.dtype).max)
 
         top = torch.topk(input=somme, k=select_number-1,
                          dim=-1).indices + 1
