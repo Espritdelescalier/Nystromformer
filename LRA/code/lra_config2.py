@@ -107,8 +107,8 @@ config = {
             "linformer-256": {"attention_grad_checkpointing": False, "linformer_k": 256},
             "reformer-2": {"attention_grad_checkpointing": False, "num_hash": 2},
             "performer-256": {"attention_grad_checkpointing": False, "rp_dim": 256, "kernel_type": "relu"},
-            "linear": {"attention_grad_checkpointing": False},
-        },
+            "linear": {"attention_grad_checkpointing": False}, }
+    },
     "pathfinder32": {
         "model": {
             "learn_pos_emb": True,
@@ -158,7 +158,7 @@ config = {
             "reformer-2": {"attention_grad_checkpointing": False, "num_hash": 2},
             "performer-256": {"attention_grad_checkpointing": False, "rp_dim": 256, "kernel_type": "relu"},
             "linear": {"attention_grad_checkpointing": False},
-            "curformer": {"attention_grad_checkpointing": False, "select_number": 64, "select_type": "embed"},
+            "curformer": {"attention_grad_checkpointing": False, "select_number": 64, "select_type": "topmin"},
         }
     },
     "retrieval": {

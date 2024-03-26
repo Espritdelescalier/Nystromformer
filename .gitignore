@@ -1,1 +1,5 @@
 /LRA/datasets/
+*.log
+*.model
+*~
+/LRA/code/__pycache__/*

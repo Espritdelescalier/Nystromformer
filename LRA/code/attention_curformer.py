@@ -14,13 +14,16 @@ class CURAttention(nn.Module):
 
         self.select_number = config["select_number"]
         self.select_type = config["select_type"]
+        print(self.select_type)
         self.seq_len = config["max_seq_len"]
 
         if "inv_coeff_init_option" in config:
             self.init_option = config["inv_init_coeff_option"]
         else:
-            #self.init_option = "original"
-            self.init_option = "new"
+            self.init_option = "original"
+            #self.init_option = "new"
+
+        self.absolute = False
 
         if self.select_type == "sum":
             self.absolute = False
@@ -31,6 +34,10 @@ class CURAttention(nn.Module):
             self.func_q_select = self.q_causal_selection
             self.func_k_select = self.k_causal_selection
             self.func_u_select = self.causal_matrix_composition
+        elif self.select_type == "topmin":
+            self.func_q_select = self.top_min_k_sum_selection
+            self.func_k_select = self.top_min_k_sum_selection
+            self.func_u_select = self.m_matrix_composition
         else:
             self.func_q_select = self.top_k_sum_selection
             self.func_k_select = self.top_k_sum_selection
@@ -89,17 +96,60 @@ class CURAttention(nn.Module):
             somme = torch.rand(B, H, N-1, device=device)
         else:
             somme = torch.sum(
-                    (T[:, :, 1:, :].abs() if self.absolute else T[:, :, 1:, :]), -1)
-            
+                (T[:, :, 1:, :].abs() if self.absolute else T[:, :, 1:, :]), -1)
+
         if mask is not None:
             somme = somme.masked_fill(
-                    mask[:, None, 1:].to(torch.bool), -torch.finfo(somme.dtype).max)
+                mask[:, None, 1:].to(torch.bool), -torch.finfo(somme.dtype).max)
 
         top = torch.topk(input=somme, k=select_number-1,
                          dim=-1).indices + 1
         top = torch.cat(
             (top, torch.zeros(B, H, 1, device=device).int()), dim=-1)
         index, _ = torch.sort(top, -1)
+        index_shift = einops.rearrange(index, 'b h n -> (b h n)')
+        shift = torch.arange(0, B*H*N, N, device=device)
+        shift = torch.repeat_interleave(shift, select_number)
+        index_shift = index_shift + shift
+        nt = torch.index_select(
+            einops.rearrange(T, 'b h n d -> (b h n) d'),
+            0,
+            index_shift
+        )
+        nt = einops.rearrange(nt, '(b h n) d -> b h n d',
+                              b=B, h=H, n=select_number)
+        return nt, index
+
+    def top_min_k_sum_selection(self, T, select_number, mask=None):
+        B, H, N, D = T.shape
+        device = T.device
+        nt = torch.tensor((B, H, select_number, D), device=device)
+        index = torch.tensor((B, H, select_number),
+                             dtype=torch.long, device=device)
+        # TODO clean le code
+        if self.select_type == "embed":
+            somme = T[:, :, 1:, 0]
+        elif self.select_type == "random":
+            somme = torch.rand(B, H, N-1, device=device)
+        else:
+            somme = torch.sum(
+                (T[:, :, 1:, :].abs() if self.absolute else T[:, :, 1:, :]), -1)
+
+        if mask is not None:
+            somme = somme.masked_fill(
+                ~mask[:, None, 1:].to(torch.bool), -torch.finfo(somme.dtype).max)
+
+        top = torch.topk(input=somme, k=select_number//2,
+                         dim=-1).indices + 1
+        mink = torch.topk(input=somme, largest=False,
+                          k=(select_number//2)-1,
+                          dim=-1).indices + 1
+        # print(top.shape, mink.shape)
+        topmin = torch.cat((top, mink), dim=-1)
+        topmin = torch.cat(
+            (topmin, torch.zeros(B, H, 1, device=device).int()), dim=-1)
+        index, _ = torch.sort(topmin, -1)
+        # print(index.shape)
         index_shift = einops.rearrange(index, 'b h n -> (b h n)')
         shift = torch.arange(0, B*H*N, N, device=device)
         shift = torch.repeat_interleave(shift, select_number)
@@ -146,7 +196,7 @@ class CURAttention(nn.Module):
 
     def forward(self, Q, K, V, mask):
 
-        Q = Q / math.sqrt(math.sqrt(self.head_dim))
+        #Q = Q / math.sqrt(math.sqrt(self.head_dim))
         #K = K * mask[:, None, :, None]
 
         #dot = torch.matmul(Q, torch.transpose(K, -2, -1))
@@ -165,8 +215,9 @@ class CURAttention(nn.Module):
         c = Q @ nc.transpose(-1, -2)
         r = nr @ K.transpose(-1, -2)
 
+        #print(torch.count_nonzero(mask, dim=1), mask.numel(), mask.shape)
         r = r.masked_fill(
-            mask[:, None, None, :].to(torch.bool),
+            ~mask[:, None, None, :].to(torch.bool),
             -torch.finfo(Q.dtype).max
         )
 

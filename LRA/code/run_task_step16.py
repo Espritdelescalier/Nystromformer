@@ -11,7 +11,7 @@ import numpy as np
 import argparse
 import math
 import itertools
-import lra_config
+import lra_config_step16
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--model", type=str, help="model",
@@ -27,18 +27,19 @@ task = args.task
 
 checkpoint_dir = "../logs/"
 
-print(lra_config.config[task]["extra_attn_config"].keys(), flush=True)
+print(lra_config_step16.config[task]["extra_attn_config"].keys(), flush=True)
 
-model_config = lra_config.config[task]["model"]
-model_config.update(lra_config.config[task]["extra_attn_config"][attn_type])
+model_config = lra_config_step16.config[task]["model"]
+model_config.update(
+    lra_config_step16.config[task]["extra_attn_config"][attn_type])
 
 model_config["mixed_precision"] = True
 model_config["attn_type"] = attn_type
 model_config["max_seq_len"] = int(
     2 ** math.ceil(math.log2(model_config["max_seq_len"])))
 
-training_config = lra_config.config[task]["training"]
-gpu_memory_config = lra_config.config[task]["gpu_memory"]
+training_config = lra_config_step16.config[task]["training"]
+gpu_memory_config = lra_config_step16.config[task]["gpu_memory"]
 
 device_ids = list(range(torch.cuda.device_count()))
 print(f"GPU list: {device_ids}")
@@ -181,7 +182,7 @@ def print_summary(summary, save_if_improved, train_step_idx):
 init_t = time.time()
 date = time.strftime('%Y_%m_%d_%H_%M', time.gmtime())
 log_f_path = os.path.join(
-    checkpoint_dir, f"{date}_{task}_{attn_type}_output_causal64.log")
+    checkpoint_dir, f"{date}_{task}_{attn_type}_output_random16.log")
 log_f = open(log_f_path, "a+")
 
 summary = {
