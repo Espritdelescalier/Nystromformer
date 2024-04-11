@@ -142,7 +142,7 @@ def step(component, step_idx):
     accu = outputs["accu"].data.item()
     time_since_start = time.time() - init_t
 
-    print(f"step={step_idx}, tt={time_since_start:.1f}, t={t_escape:.3f}, bs={batch_size}, lr={learning_rate:.6f}, loss={loss:.4f}, accu={accu:.4f}\t\t\t\t", end="\r", flush=True)
+    print(f"step={step_idx}, tt={time_since_start:.2f}, t={t_escape:.9f}, bs={batch_size}, lr={learning_rate:.6f}, loss={loss:.4f}, accu={accu:.4f}\t\t\t\t", end="\r", flush=True)
 
     summary[component]["t"] += t_escape
     summary[component]["loss"].append(loss)
