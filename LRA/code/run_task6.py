@@ -27,18 +27,18 @@ task = args.task
 
 checkpoint_dir = "../logs/"
 
-print(lra_config3.config[task]["extra_attn_config"].keys(), flush=True)
+print(lra_config6.config[task]["extra_attn_config"].keys(), flush=True)
 
-model_config = lra_config3.config[task]["model"]
-model_config.update(lra_config3.config[task]["extra_attn_config"][attn_type])
+model_config = lra_config6.config[task]["model"]
+model_config.update(lra_config6.config[task]["extra_attn_config"][attn_type])
 
 model_config["mixed_precision"] = True
 model_config["attn_type"] = attn_type
 model_config["max_seq_len"] = int(
     2 ** math.ceil(math.log2(model_config["max_seq_len"])))
 
-training_config = lra_config3.config[task]["training"]
-gpu_memory_config = lra_config3.config[task]["gpu_memory"]
+training_config = lra_config6.config[task]["training"]
+gpu_memory_config = lra_config6.config[task]["gpu_memory"]
 
 device_ids = list(range(torch.cuda.device_count()))
 print(f"GPU list: {device_ids}")
