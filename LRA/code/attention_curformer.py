@@ -196,7 +196,7 @@ class CURAttention(nn.Module):
 
     def forward(self, Q, K, V, mask):
 
-        #Q = Q / math.sqrt(math.sqrt(self.head_dim))
+        Q = Q / math.sqrt(self.head_dim)
         #K = K * mask[:, None, :, None]
 
         #dot = torch.matmul(Q, torch.transpose(K, -2, -1))

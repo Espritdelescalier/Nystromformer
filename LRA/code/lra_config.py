@@ -42,6 +42,7 @@ config = {
             "reformer-2": 32,
             "performer-256": 32,
             "linear": 32,
+            "curformer": 32,
         },
         "extra_attn_config": {
             "softmax": {"attention_grad_checkpointing": True},
@@ -53,6 +54,7 @@ config = {
             "reformer-2": {"attention_grad_checkpointing": False, "num_hash": 2},
             "performer-256": {"attention_grad_checkpointing": False, "rp_dim": 256, "kernel_type": "relu"},
             "linear": {"attention_grad_checkpointing": False},
+            "curformer": {"attention_grad_checkpointing": False, "select_number": 64, "select_type": "topmin"},
         }
     },
     "image": {
@@ -97,6 +99,7 @@ config = {
             "reformer-2": 128,
             "performer-256": 128,
             "linear": 128,
+            "curformer": 128,
         },
         "extra_attn_config": {
             "softmax": {"attention_grad_checkpointing": True},
@@ -108,6 +111,7 @@ config = {
             "reformer-2": {"attention_grad_checkpointing": False, "num_hash": 2},
             "performer-256": {"attention_grad_checkpointing": False, "rp_dim": 256, "kernel_type": "relu"},
             "linear": {"attention_grad_checkpointing": False},
+            "curformer": {"attention_grad_checkpointing": False, "select_number": 64, "select_type": "topmin"},
         }
     },
     "pathfinder32": {
@@ -159,7 +163,7 @@ config = {
             "reformer-2": {"attention_grad_checkpointing": False, "num_hash": 2},
             "performer-256": {"attention_grad_checkpointing": False, "rp_dim": 256, "kernel_type": "relu"},
             "linear": {"attention_grad_checkpointing": False},
-            "curformer": {"attention_grad_checkpointing": False, "select_number": 64, "select_type": "random"},
+            "curformer": {"attention_grad_checkpointing": False, "select_number": 64, "select_type": "abs"},
         }
     },
     "retrieval": {
@@ -204,6 +208,7 @@ config = {
             "reformer-2": 32,
             "performer-256": 32,
             "linear": 32,
+            "curformer": 32,
         },
         "extra_attn_config": {
             "softmax": {"attention_grad_checkpointing": True},
@@ -215,6 +220,7 @@ config = {
             "reformer-2": {"attention_grad_checkpointing": False, "num_hash": 2},
             "performer-256": {"attention_grad_checkpointing": False, "rp_dim": 256, "kernel_type": "relu"},
             "linear": {"attention_grad_checkpointing": False},
+            "curformer": {"attention_grad_checkpointing": False, "select_number": 64, "select_type": "topmin"},
         }
     },
     "text": {
@@ -259,6 +265,7 @@ config = {
             "reformer-2": 32,
             "performer-256": 32,
             "linear": 32,
+            "topmimn": 32,
         },
         "extra_attn_config": {
             "softmax": {"attention_grad_checkpointing": True},
@@ -270,6 +277,7 @@ config = {
             "reformer-2": {"attention_grad_checkpointing": False, "num_hash": 2},
             "performer-256": {"attention_grad_checkpointing": False, "rp_dim": 256, "kernel_type": "relu"},
             "linear": {"attention_grad_checkpointing": False},
+            "curformer": {"attention_grad_checkpointing": False, "select_number": 64, "select_type": "topmin"},
         }
     }
 }

@@ -96,8 +96,8 @@ class Model(nn.Module):
 
         X = self.embeddings(input_ids)
 
-        # if mask is None:
-        mask = torch.ones_like(input_ids)
+        if mask is None:
+            mask = torch.ones_like(input_ids)
         #print(mask == input_ids)
 
         if self.tied_weights:
