@@ -11,9 +11,6 @@ class CURAttention(nn.Module):
         self.head_dim = config["head_dim"]
         self.num_head = config["num_head"]
 
-        self.curv = config["curv_order"]
-        print("New order" if self.curv else "Old order")
-
         self.select_number = config["select_number"]
         self.select_type = config["select_type"]
         print(self.select_type)
@@ -231,11 +228,8 @@ class CURAttention(nn.Module):
             r, dim=-1
         )
         kernel_2_inv = self.iterative_inv(u)
-        if self.curv:
-            X = torch.matmul(kernel_1, torch.matmul(kernel_2_inv, torch.matmul(kernel_3, V)))
-        else:
-            X = torch.matmul(kernel_1, kernel_2_inv)
-            X = torch.matmul(X, torch.matmul(kernel_3, V))
+
+        X = torch.matmul(kernel_1, torch.matmul(kernel_2_inv, torch.matmul(kernel_3, V)))
 
         return X
 
