@@ -11,7 +11,7 @@ import numpy as np
 import argparse
 import math
 import itertools
-import lra_config3
+import lra_config6
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--model", type=str, help="model",

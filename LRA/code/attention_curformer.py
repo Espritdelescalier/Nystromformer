@@ -1,4 +1,3 @@
-
 import torch
 import torch.nn as nn
 import math
@@ -12,6 +11,9 @@ class CURAttention(nn.Module):
         self.head_dim = config["head_dim"]
         self.num_head = config["num_head"]
 
+        self.curv = config["curv_order"]
+        print("New order" if self.curv else "Old order")
+
         self.select_number = config["select_number"]
         self.select_type = config["select_type"]
         print(self.select_type)
@@ -21,7 +23,7 @@ class CURAttention(nn.Module):
             self.init_option = config["inv_init_coeff_option"]
         else:
             self.init_option = "original"
-            #self.init_option = "new"
+            # self.init_option = "new"
 
         self.absolute = False
 
@@ -93,7 +95,7 @@ class CURAttention(nn.Module):
         if self.select_type == "embed":
             somme = T[:, :, 1:, 0]
         elif self.select_type == "random":
-            somme = torch.rand(B, H, N-1, device=device)
+            somme = torch.rand(B, H, N - 1, device=device)
         else:
             somme = torch.sum(
                 (T[:, :, 1:, :].abs() if self.absolute else T[:, :, 1:, :]), -1)
@@ -102,13 +104,13 @@ class CURAttention(nn.Module):
             somme = somme.masked_fill(
                 mask[:, None, 1:].to(torch.bool), -torch.finfo(somme.dtype).max)
 
-        top = torch.topk(input=somme, k=select_number-1,
+        top = torch.topk(input=somme, k=select_number - 1,
                          dim=-1).indices + 1
         top = torch.cat(
             (top, torch.zeros(B, H, 1, device=device).int()), dim=-1)
         index, _ = torch.sort(top, -1)
         index_shift = einops.rearrange(index, 'b h n -> (b h n)')
-        shift = torch.arange(0, B*H*N, N, device=device)
+        shift = torch.arange(0, B * H * N, N, device=device)
         shift = torch.repeat_interleave(shift, select_number)
         index_shift = index_shift + shift
         nt = torch.index_select(
@@ -130,7 +132,7 @@ class CURAttention(nn.Module):
         if self.select_type == "embed":
             somme = T[:, :, 1:, 0]
         elif self.select_type == "random":
-            somme = torch.rand(B, H, N-1, device=device)
+            somme = torch.rand(B, H, N - 1, device=device)
         else:
             somme = torch.sum(
                 (T[:, :, 1:, :].abs() if self.absolute else T[:, :, 1:, :]), -1)
@@ -139,10 +141,10 @@ class CURAttention(nn.Module):
             somme = somme.masked_fill(
                 ~mask[:, None, 1:].to(torch.bool), -torch.finfo(somme.dtype).max)
 
-        top = torch.topk(input=somme, k=select_number//2,
+        top = torch.topk(input=somme, k=select_number // 2,
                          dim=-1).indices + 1
         mink = torch.topk(input=somme, largest=False,
-                          k=(select_number//2)-1,
+                          k=(select_number // 2) - 1,
                           dim=-1).indices + 1
         # print(top.shape, mink.shape)
         topmin = torch.cat((top, mink), dim=-1)
@@ -151,7 +153,7 @@ class CURAttention(nn.Module):
         index, _ = torch.sort(topmin, -1)
         # print(index.shape)
         index_shift = einops.rearrange(index, 'b h n -> (b h n)')
-        shift = torch.arange(0, B*H*N, N, device=device)
+        shift = torch.arange(0, B * H * N, N, device=device)
         shift = torch.repeat_interleave(shift, select_number)
         index_shift = index_shift + shift
         nt = torch.index_select(
@@ -182,7 +184,7 @@ class CURAttention(nn.Module):
         device = C.device
         nm = torch.tensor((B, H, M, M), device=device)
         index_shift = einops.rearrange(R_indexes, 'b h n -> (b h n)')
-        shift = torch.arange(0, B*H*N, N, device=device)
+        shift = torch.arange(0, B * H * N, N, device=device)
         shift = torch.repeat_interleave(shift, M)
         index_shift = index_shift + shift
         nm = torch.index_select(
@@ -197,16 +199,16 @@ class CURAttention(nn.Module):
     def forward(self, Q, K, V, mask):
 
         Q = Q / math.sqrt(self.head_dim)
-        #K = K * mask[:, None, :, None]
+        # K = K * mask[:, None, :, None]
 
-        #dot = torch.matmul(Q, torch.transpose(K, -2, -1))
-        #dot = dot / math.sqrt(self.head_dim)
-        #dot = dot - 1e6 * (1 - mask[:, None, None, :])
+        # dot = torch.matmul(Q, torch.transpose(K, -2, -1))
+        # dot = dot / math.sqrt(self.head_dim)
+        # dot = dot - 1e6 * (1 - mask[:, None, None, :])
 
-        #attn = nn.functional.softmax(dot, dim=-1)
-        #attn = self.drop_attn(attn)
+        # attn = nn.functional.softmax(dot, dim=-1)
+        # attn = self.drop_attn(attn)
 
-        #X = torch.matmul(attn, V)
+        # X = torch.matmul(attn, V)
 
         nc, c_index = self.func_k_select(
             T=K, select_number=self.select_number, mask=mask)
@@ -215,7 +217,7 @@ class CURAttention(nn.Module):
         c = Q @ nc.transpose(-1, -2)
         r = nr @ K.transpose(-1, -2)
 
-        #print(torch.count_nonzero(mask, dim=1), mask.numel(), mask.shape)
+        # print(torch.count_nonzero(mask, dim=1), mask.numel(), mask.shape)
         r = r.masked_fill(
             ~mask[:, None, None, :].to(torch.bool),
             -torch.finfo(Q.dtype).max
@@ -229,8 +231,11 @@ class CURAttention(nn.Module):
             r, dim=-1
         )
         kernel_2_inv = self.iterative_inv(u)
-        X = torch.matmul(kernel_1, kernel_2_inv)
-        X = torch.matmul(X, torch.matmul(kernel_3, V))
+        if self.curv:
+            X = torch.matmul(kernel_1, torch.matmul(kernel_2_inv, torch.matmul(kernel_3, V)))
+        else:
+            X = torch.matmul(kernel_1, kernel_2_inv)
+            X = torch.matmul(X, torch.matmul(kernel_3, V))
 
         return X
 
@@ -242,12 +247,12 @@ class CURAttention(nn.Module):
             V = 1 / torch.max(torch.sum(K, dim=-2)) * K.transpose(-1, -2)
         else:
             V = 1 / torch.max(torch.sum(K, dim=-2), dim=-
-                              1).values[:, :, None, None] * K.transpose(-1, -2)
+            1).values[:, :, None, None] * K.transpose(-1, -2)
 
         for _ in range(n_iter):
             KV = torch.matmul(K, V)
             V = torch.matmul(0.25 * V, 13 * I - torch.matmul(KV,
-                             15 * I - torch.matmul(KV, 7 * I - KV)))
+                                                             15 * I - torch.matmul(KV, 7 * I - KV)))
         return V
 
     def extra_repr(self):
