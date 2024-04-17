@@ -39,6 +39,7 @@ model_config["max_seq_len"] = int(
 
 training_config = lra_config.config[task]["training"]
 gpu_memory_config = lra_config.config[task]["gpu_memory"]
+extra_config = lra_config.config[task]["extra_attn_config"]
 
 device_ids = list(range(torch.cuda.device_count()))
 print(f"GPU list: {device_ids}")
@@ -114,6 +115,7 @@ def step(component, step_idx):
         amp_scaler.step(optimizer)
         amp_scaler.update()
         lr_scheduler.step()
+        print(torch.cuda.max_memory_allocated("cuda:0"))
     else:
         with torch.no_grad():
             outputs = {}
@@ -180,8 +182,9 @@ def print_summary(summary, save_if_improved, train_step_idx):
 
 init_t = time.time()
 date = time.strftime('%Y_%m_%d_%H_%M', time.gmtime())
+select_cur = extra_config["curformer"]["select_type"]
 log_f_path = os.path.join(
-    checkpoint_dir, f"{date}_{task}_{attn_type}_output_causal64.log")
+    checkpoint_dir, f"{date}_{task}_{attn_type}_{select_cur}.log")
 log_f = open(log_f_path, "a+")
 
 summary = {

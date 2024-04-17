@@ -54,7 +54,7 @@ class CURAttention(nn.Module):
         nt = torch.index_select(
             T,
             2,
-            torch.arange(0,imax,pas, device=T.device)
+            torch.arange(0, imax, pas, device=T.device)
         )
 
         return nt, None
@@ -171,7 +171,13 @@ class CURAttention(nn.Module):
 
         imax = pas * M
 
-        return C[:, :, 0:imax:pas, :]
+        return torch.index_select(
+            C,
+            2,
+            torch.arange(0, imax, pas, device=C.device)
+        )
+
+        # return C[:, :, 0:imax:pas, :]
 
     def m_matrix_composition(self, C, R_indexes):
         B, H, N, M = C.shape
@@ -226,7 +232,8 @@ class CURAttention(nn.Module):
         )
         kernel_2_inv = self.iterative_inv(u)
 
-        X = torch.matmul(kernel_1, torch.matmul(kernel_2_inv, torch.matmul(kernel_3, V)))
+        X = torch.matmul(kernel_1, torch.matmul(
+            kernel_2_inv, torch.matmul(kernel_3, V)))
 
         return X
 
@@ -238,7 +245,7 @@ class CURAttention(nn.Module):
             V = 1 / torch.max(torch.sum(K, dim=-2)) * K.transpose(-1, -2)
         else:
             V = 1 / torch.max(torch.sum(K, dim=-2), dim=-
-            1).values[:, :, None, None] * K.transpose(-1, -2)
+                              1).values[:, :, None, None] * K.transpose(-1, -2)
 
         for _ in range(n_iter):
             KV = torch.matmul(K, V)
