@@ -30,8 +30,8 @@ class CURAttention(nn.Module):
             self.absolute = True
 
         if self.select_type == "causal":
-            self.func_q_select = self.q_causal_selection
-            self.func_k_select = self.k_causal_selection
+            self.func_q_select = self.step_selection
+            self.func_k_select = self.step_selection
             self.func_u_select = self.causal_matrix_composition
         elif self.select_type == "topmin":
             self.func_q_select = self.top_min_k_sum_selection
@@ -42,25 +42,22 @@ class CURAttention(nn.Module):
             self.func_k_select = self.top_k_sum_selection
             self.func_u_select = self.m_matrix_composition
 
-    def q_causal_selection(self, T, select_number, mask=None):
+    def step_selection(self, T, select_number, mask=None):
         B, H, N, D = T.shape
         if N < select_number:
             select_number = N
 
-        N2 = N
-
-        if N2 < select_number:
-            N2 = select_number
-
-        pas = N2 // select_number
+        pas = N // select_number
 
         imax = pas * select_number
 
-        nt = T[:, :, 0:imax:pas, :]
+        nt = torch.index_select(
+            T,
+            2,
+            torch.arange(0,imax,pas, device=T.device)
+        )
 
-        index = None
-
-        return nt, index
+        return nt, None
 
     def k_causal_selection(self, T, select_number, mask=None):
         B, H, N, D = T.shape
