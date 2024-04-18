@@ -211,13 +211,14 @@ class CURAttention(nn.Module):
         # return C[:, :, 0:imax:pas, :]
 
     def m_matrix_composition(self, C, R_indexes):
-        B, H, N, M = C.shape
-        device = C.device
-        # nm = torch.tensor((B, H, M, M), device=device)
-        index_shift = einops.rearrange(R_indexes, 'b h n -> (b h n)')
-        shift = torch.arange(0, B * H * N, N, device=device)
-        shift = torch.repeat_interleave(shift, M)
-        index_shift = index_shift + shift
+        with torch.no_grad():
+            B, H, N, M = C.shape
+            device = C.device
+            # nm = torch.tensor((B, H, M, M), device=device)
+            index_shift = einops.rearrange(R_indexes, 'b h n -> (b h n)')
+            shift = torch.arange(0, B * H * N, N, device=device)
+            shift = torch.repeat_interleave(shift, M)
+            index_shift = index_shift + shift
         nm = torch.index_select(
             einops.rearrange(C, 'b h n m -> (b h n) m'),
             0,
