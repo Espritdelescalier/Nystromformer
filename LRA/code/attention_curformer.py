@@ -118,8 +118,8 @@ class CURAttention(nn.Module):
     def top_k_sum_selection(self, T, select_number, mask=None):
         B, H, N, D = T.shape
         device = T.device
-        #nt = torch.tensor((B, H, select_number, D), device=device)
-        #index = torch.tensor((B, H, select_number),dtype=torch.long, device=device)
+        # nt = torch.tensor((B, H, select_number, D), device=device)
+        # index = torch.tensor((B, H, select_number),dtype=torch.long, device=device)
         # TODO clean le code
         if self.select_type == "embed":
             somme = T[:, :, :, 0]
@@ -132,9 +132,9 @@ class CURAttention(nn.Module):
         if mask is not None:
             somme = somme.masked_fill(
                 ~mask[:, None, :].to(torch.bool), -torch.finfo(somme.dtype).max)
-
-        index = torch.topk(input=somme, k=select_number,dim=-1).indices
-        #index, _ = torch.sort(index, -1)
+        index = torch.argsort(somme, dim=-1, descending=True)[:, :, :select_number]
+        # index = torch.topk(input=somme, k=select_number,dim=-1).indices
+        # index, _ = torch.sort(index, -1)
         index_shift = einops.rearrange(index, 'b h n -> (b h n)')
         shift = torch.arange(0, B * H * N, N, device=device)
         shift = torch.repeat_interleave(shift, select_number)
@@ -212,7 +212,7 @@ class CURAttention(nn.Module):
     def m_matrix_composition(self, C, R_indexes):
         B, H, N, M = C.shape
         device = C.device
-        #nm = torch.tensor((B, H, M, M), device=device)
+        # nm = torch.tensor((B, H, M, M), device=device)
         index_shift = einops.rearrange(R_indexes, 'b h n -> (b h n)')
         shift = torch.arange(0, B * H * N, N, device=device)
         shift = torch.repeat_interleave(shift, M)
@@ -265,7 +265,7 @@ class CURAttention(nn.Module):
             V = 1 / torch.max(torch.sum(K, dim=-2)) * K.transpose(-1, -2)
         else:
             V = 1 / torch.max(torch.sum(K, dim=-2), dim=-
-                              1).values[:, :, None, None] * K.transpose(-1, -2)
+            1).values[:, :, None, None] * K.transpose(-1, -2)
 
         for _ in range(n_iter):
             KV = torch.matmul(K, V)
