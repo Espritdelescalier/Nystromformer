@@ -44,6 +44,7 @@ class CURAttention(nn.Module):
 
     def step_selection(self, T, select_number, mask=None):
         B, H, N, D = T.shape
+
         if N < select_number:
             select_number = N
 
@@ -79,20 +80,18 @@ class CURAttention(nn.Module):
 
         return nt, index
 
-    def top_k_sum_selection(self, T, select_number, mask=None):
+    """def top_k_sum_selection(self, T, select_number, mask=None):
         B, H, N, D = T.shape
         device = T.device
-        nt = torch.tensor((B, H, select_number, D), device=device)
-        index = torch.tensor((B, H, select_number),
-                             dtype=torch.long, device=device)
+        #nt = torch.tensor((B, H, select_number, D), device=device)
+        #index = torch.tensor((B, H, select_number),dtype=torch.long, device=device)
         # TODO clean le code
         if self.select_type == "embed":
             somme = T[:, :, 1:, 0]
         elif self.select_type == "random":
             somme = torch.rand(B, H, N - 1, device=device)
         else:
-            somme = torch.sum(
-                (T[:, :, 1:, :].abs() if self.absolute else T[:, :, 1:, :]), -1)
+            somme = torch.sum((T[:, :, 1:, :].abs() if self.absolute else T[:, :, 1:, :]), -1)
 
         if mask is not None:
             somme = somme.masked_fill(
@@ -103,6 +102,39 @@ class CURAttention(nn.Module):
         top = torch.cat(
             (top, torch.zeros(B, H, 1, device=device).int()), dim=-1)
         index, _ = torch.sort(top, -1)
+        index_shift = einops.rearrange(index, 'b h n -> (b h n)')
+        shift = torch.arange(0, B * H * N, N, device=device)
+        shift = torch.repeat_interleave(shift, select_number)
+        index_shift = index_shift + shift
+        nt = torch.index_select(
+            einops.rearrange(T, 'b h n d -> (b h n) d'),
+            0,
+            index_shift
+        )
+        nt = einops.rearrange(nt, '(b h n) d -> b h n d',
+                              b=B, h=H, n=select_number)
+        return nt, index"""
+
+    def top_k_sum_selection(self, T, select_number, mask=None):
+        B, H, N, D = T.shape
+        device = T.device
+        #nt = torch.tensor((B, H, select_number, D), device=device)
+        #index = torch.tensor((B, H, select_number),dtype=torch.long, device=device)
+        # TODO clean le code
+        if self.select_type == "embed":
+            somme = T[:, :, :, 0]
+        elif self.select_type == "random":
+            torch.randperm(N)
+            somme = torch.rand(B, H, N, device=device)
+        else:
+            somme = torch.sum((T.abs() if self.absolute else T), -1)
+
+        if mask is not None:
+            somme = somme.masked_fill(
+                ~mask[:, None, :].to(torch.bool), -torch.finfo(somme.dtype).max)
+
+        index = torch.topk(input=somme, k=select_number,dim=-1).indices
+        #index, _ = torch.sort(index, -1)
         index_shift = einops.rearrange(index, 'b h n -> (b h n)')
         shift = torch.arange(0, B * H * N, N, device=device)
         shift = torch.repeat_interleave(shift, select_number)
@@ -162,12 +194,10 @@ class CURAttention(nn.Module):
     def causal_matrix_composition(self, C, R_indexes):
         B, H, N, M = C.shape
 
-        N2 = N
+        if N < M:
+            N = M
 
-        if N2 < M:
-            N2 = M
-
-        pas = N2 // M
+        pas = N // M
 
         imax = pas * M
 
@@ -182,7 +212,7 @@ class CURAttention(nn.Module):
     def m_matrix_composition(self, C, R_indexes):
         B, H, N, M = C.shape
         device = C.device
-        nm = torch.tensor((B, H, M, M), device=device)
+        #nm = torch.tensor((B, H, M, M), device=device)
         index_shift = einops.rearrange(R_indexes, 'b h n -> (b h n)')
         shift = torch.arange(0, B * H * N, N, device=device)
         shift = torch.repeat_interleave(shift, M)
@@ -199,16 +229,6 @@ class CURAttention(nn.Module):
     def forward(self, Q, K, V, mask):
 
         Q = Q / math.sqrt(self.head_dim)
-        # K = K * mask[:, None, :, None]
-
-        # dot = torch.matmul(Q, torch.transpose(K, -2, -1))
-        # dot = dot / math.sqrt(self.head_dim)
-        # dot = dot - 1e6 * (1 - mask[:, None, None, :])
-
-        # attn = nn.functional.softmax(dot, dim=-1)
-        # attn = self.drop_attn(attn)
-
-        # X = torch.matmul(attn, V)
 
         nc, c_index = self.func_k_select(
             T=K, select_number=self.select_number, mask=mask)
