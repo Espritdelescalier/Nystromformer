@@ -250,8 +250,8 @@ class CURAttention(nn.Module):
             shift = torch.repeat_interleave(shift, self.select_number * D)
 
             index_shift = (torch.repeat_interleave(r_index * D, D)
-                           + torch.arange(D,device=Q.device).expand(r_index.numel(), D).flatten() + shift)
-            X.put_(index_shift, RV)
+                           + torch.arange(D, device=Q.device).expand(r_index.numel(), D).flatten() + shift)
+            X.put_(index_shift.reshape_as(RV), RV)
 
         return X
 
