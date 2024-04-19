@@ -150,39 +150,23 @@ class CURAttention(nn.Module):
         return nt, index
 
     def top_min_k_sum_selection(self, T, select_number, mask=None):
-        B, H, N, D = T.shape
-        device = T.device
-        nt = torch.tensor((B, H, select_number, D), device=device)
-        index = torch.tensor((B, H, select_number),
-                             dtype=torch.long, device=device)
-        # TODO clean le code
-        if self.select_type == "embed":
-            somme = T[:, :, 1:, 0]
-        elif self.select_type == "random":
-            somme = torch.rand(B, H, N - 1, device=device)
-        else:
-            somme = torch.sum(
-                (T[:, :, 1:, :].abs() if self.absolute else T[:, :, 1:, :]), -1)
+        with torch.no_grad():
+            B, H, N, D = T.shape
+            device = T.device
 
-        if mask is not None:
-            somme = somme.masked_fill(
-                ~mask[:, None, 1:].to(torch.bool), -torch.finfo(somme.dtype).max)
+            somme = torch.sum(T, -1)
 
-        top = torch.topk(input=somme, k=select_number // 2,
-                         dim=-1).indices + 1
-        mink = torch.topk(input=somme, largest=False,
-                          k=(select_number // 2) - 1,
-                          dim=-1).indices + 1
-        # print(top.shape, mink.shape)
-        topmin = torch.cat((top, mink), dim=-1)
-        topmin = torch.cat(
-            (topmin, torch.zeros(B, H, 1, device=device).int()), dim=-1)
-        index, _ = torch.sort(topmin, -1)
-        # print(index.shape)
-        index_shift = einops.rearrange(index, 'b h n -> (b h n)')
-        shift = torch.arange(0, B * H * N, N, device=device)
-        shift = torch.repeat_interleave(shift, select_number)
-        index_shift = index_shift + shift
+            """if mask is not None:
+                somme = somme.masked_fill(
+                    ~mask[:, None, :].to(torch.bool), -torch.finfo(somme.dtype).max)"""
+
+            index = torch.argsort(somme, dim=-1)
+            index = torch.cat((index[:, :, :select_number], index[:, :, -select_number:]), dim=-1)
+
+            index_shift = einops.rearrange(index, 'b h n -> (b h n)')
+            shift = torch.arange(0, B * H * N, N, device=device)
+            shift = torch.repeat_interleave(shift, select_number)
+            index_shift = index_shift + shift
         nt = torch.index_select(
             einops.rearrange(T, 'b h n d -> (b h n) d'),
             0,
