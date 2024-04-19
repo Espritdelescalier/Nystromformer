@@ -16,6 +16,8 @@ class CURAttention(nn.Module):
         print(self.select_type)
         self.seq_len = config["max_seq_len"]
 
+        self.copy_rv = "copy_rv" in config
+
         if "inv_coeff_init_option" in config:
             self.init_option = config["inv_init_coeff_option"]
         else:
@@ -161,7 +163,7 @@ class CURAttention(nn.Module):
                     ~mask[:, None, :].to(torch.bool), -torch.finfo(somme.dtype).max)"""
 
             index = torch.argsort(somme, dim=-1)
-            index = torch.cat((index[:, :, :select_number//2], index[:, :, -select_number//2:]), dim=-1)
+            index = torch.cat((index[:, :, :select_number // 2], index[:, :, -select_number // 2:]), dim=-1)
 
             index_shift = einops.rearrange(index, 'b h n -> (b h n)')
             shift = torch.arange(0, B * H * N, N, device=device)
@@ -213,7 +215,7 @@ class CURAttention(nn.Module):
         return nm
 
     def forward(self, Q, K, V, mask):
-
+        B, H, N, D = Q.shape
         Q = Q / math.sqrt(self.head_dim)
 
         nc, c_index = self.func_k_select(
@@ -238,8 +240,18 @@ class CURAttention(nn.Module):
         )
         kernel_2_inv = self.iterative_inv(u)
 
+        RV = torch.matmul(kernel_3, V)
+
         X = torch.matmul(kernel_1, torch.matmul(
-            kernel_2_inv, torch.matmul(kernel_3, V)))
+            kernel_2_inv, RV))
+
+        if self.copy_rv:
+            shift = torch.arange(0, B * H * N * D, N * D, device=Q.device)
+            shift = torch.repeat_interleave(shift, self.select_number * D)
+
+            index_shift = (torch.repeat_interleave(r_index * D, D)
+                           + torch.arange(D).expand(r_index.numel(), D).flatten() + shift)
+            X.put_(index_shift, RV)
 
         return X
 
