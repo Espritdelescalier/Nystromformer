@@ -161,7 +161,7 @@ class CURAttention(nn.Module):
                     ~mask[:, None, :].to(torch.bool), -torch.finfo(somme.dtype).max)"""
 
             index = torch.argsort(somme, dim=-1)
-            index = torch.cat((index[:, :, :select_number], index[:, :, -select_number:]), dim=-1)
+            index = torch.cat((index[:, :, :select_number//2], index[:, :, -select_number//2:]), dim=-1)
 
             index_shift = einops.rearrange(index, 'b h n -> (b h n)')
             shift = torch.arange(0, B * H * N, N, device=device)
