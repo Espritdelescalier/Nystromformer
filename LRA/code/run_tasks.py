@@ -115,7 +115,7 @@ def step(component, step_idx):
         amp_scaler.step(optimizer)
         amp_scaler.update()
         lr_scheduler.step()
-        print(torch.cuda.max_memory_allocated("cuda:0"))
+        #print(torch.cuda.max_memory_allocated("cuda:0"))
     else:
         with torch.no_grad():
             outputs = {}
