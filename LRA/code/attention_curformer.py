@@ -142,6 +142,10 @@ class CURAttention(nn.Module):
             shift = torch.arange(0, B * H * N, N, device=device)
             shift = torch.repeat_interleave(shift, select_number)
             index_shift = index_shift + shift
+            return index, index_shift
+
+    def submatrix_extraction_rearrange(self, T, select_number, index_shift):
+        B, H, N, D = T.shape
         nt = torch.index_select(
             einops.rearrange(T, 'b h n d -> (b h n) d'),
             0,
@@ -149,7 +153,7 @@ class CURAttention(nn.Module):
         )
         nt = einops.rearrange(nt, '(b h n) d -> b h n d',
                               b=B, h=H, n=select_number)
-        return nt, index
+        return nt
 
     def top_min_k_sum_selection(self, T, select_number, mask=None):
         with torch.no_grad():
@@ -218,10 +222,12 @@ class CURAttention(nn.Module):
         B, H, N, D = Q.shape
         Q = Q / math.sqrt(self.head_dim)
 
-        nc, c_index = self.func_k_select(
-            T=K, select_number=self.select_number, mask=mask)
-        nr, r_index = self.func_q_select(
-            T=Q, select_number=self.select_number, mask=mask)
+        index, index_shift = self.func_k_select(T=K, select_number=self.select_number, mask=mask)
+        #nr, r_index = self.func_q_select(T=Q, select_number=self.select_number, mask=mask)
+
+        nc = self.submatrix_extraction_rearrange(K, self.select_number, index_shift)
+        nr = self.submatrix_extraction_rearrange(Q, self.select_number, index_shift)
+
         c = Q @ nc.transpose(-1, -2)
         r = nr @ K.transpose(-1, -2)
 
@@ -234,7 +240,7 @@ class CURAttention(nn.Module):
         kernel_1 = torch.nn.functional.softmax(
             c, dim=-1
         )
-        u = self.func_u_select(kernel_1, r_index)
+        u = self.func_u_select(kernel_1, index)
         kernel_3 = torch.nn.functional.softmax(
             r, dim=-1
         )
@@ -249,8 +255,8 @@ class CURAttention(nn.Module):
             shift = torch.arange(0, B * H * N * D, N * D, device=Q.device)
             shift = torch.repeat_interleave(shift, self.select_number * D)
 
-            index_shift = (torch.repeat_interleave(r_index * D, D)
-                           + torch.arange(D, device=Q.device).expand(r_index.numel(), D).flatten() + shift)
+            index_shift = (torch.repeat_interleave(index * D, D)
+                           + torch.arange(D, device=Q.device).expand(index.numel(), D).flatten() + shift)
             X.put_(index_shift.reshape_as(RV), RV)
 
         return X

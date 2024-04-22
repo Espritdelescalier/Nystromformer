@@ -183,8 +183,11 @@ def print_summary(summary, save_if_improved, train_step_idx):
 init_t = time.time()
 date = time.strftime('%Y_%m_%d_%H_%M', time.gmtime())
 select_cur = extra_config["curformer"]["select_type"]
+copy_rv = "_RV" if "copy_rv" in extra_config["curformer"] else ""
+print(select_cur)
+print(copy_rv)
 log_f_path = os.path.join(
-    checkpoint_dir, f"{date}_{task}_{attn_type}_{select_cur}.log")
+    checkpoint_dir, f"{date}_{task}_{attn_type}_{select_cur}{copy_rv}_SameSelectOnK.log")
 log_f = open(log_f_path, "a+")
 
 summary = {
