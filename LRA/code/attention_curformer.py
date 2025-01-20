@@ -10,132 +10,111 @@ class CURAttention(nn.Module):
 
         self.head_dim = config["head_dim"]
         self.num_head = config["num_head"]
-
-        self.select_number = config["select_number"]
-        self.select_type = config["select_type"]
-        print(self.select_type)
         self.seq_len = config["max_seq_len"]
 
-        self.copy_rv = "copy_rv" in config
-
-        if "inv_coeff_init_option" in config:
-            self.init_option = config["inv_init_coeff_option"]
-        else:
-            self.init_option = "original"
-            # self.init_option = "new"
-
+        self.index_select = None
+        self.func_select = None
+        self.submatrix_extraction = None
         self.absolute = False
+        self.copy_rv = "copy_rv" in config
+        self.select_number = config["select_number"] if "select_number" in config else 64
+        self.select_type = config["select_type"] if "select_type" in config else "random"
+        self.num_iter = config["num_iter"] if "num_iter" in config else 4
+        self.cls_token = config["pooling_mode"] == "CLS"
 
-        if self.select_type == "sum":
-            self.absolute = False
-        elif self.select_type == "abs":
+        self.init_cur(config["select_mode"] if "select_mode" in config else "default")
+
+    def init_cur(self, select_mode):
+
+        if select_mode == 'same_k':
+            self.index_select = self.index_select_same_on_k
+        elif select_mode == 'same_q':
+            self.index_select = self.index_select_same_on_q
+        elif select_mode == 'inverted':
+            self.index_select = self.index_select_different_inverted
+        else:
+            self.index_select = self.index_select_different
+
+        self.submatrix_extraction = self.submatrix_extraction_rearrange
+
+        if self.select_type == "abs":
             self.absolute = True
 
-        if self.select_type == "causal":
-            self.func_q_select = self.step_selection
-            self.func_k_select = self.step_selection
-            self.func_u_select = self.causal_matrix_composition
+        if self.select_type == "step":
+            self.func_select = self.step_selection
+            self.submatrix_extraction = self.submatrix_extraction_step
         elif self.select_type == "topmin":
-            self.func_q_select = self.top_min_k_sum_selection
-            self.func_k_select = self.top_min_k_sum_selection
-            self.func_u_select = self.m_matrix_composition
+            self.func_select = self.top_min_k_sum_selection
         else:
-            self.func_q_select = self.top_k_sum_selection
-            self.func_k_select = self.top_k_sum_selection
-            self.func_u_select = self.m_matrix_composition
+            self.func_select = self.top_k_sum_selection
+
+    def index_select_same_on_k(self, q, k, select_number, mask=None):
+        index, index_shift = self.func_select(
+            T=k, select_number=select_number, mask=mask)
+        return index, index_shift, index, index_shift
+
+    def index_select_same_on_q(self, q, k, select_number, mask=None):
+        index, index_shift = self.func_select(
+            T=q, select_number=select_number, mask=mask)
+        return index, index_shift, index, index_shift
+
+    def index_select_different(self, q, k, select_number, mask=None):
+        index_k, index_shift_k = self.func_select(
+            T=k, select_number=select_number, mask=mask)
+        index_q, index_shift_q = self.func_select(
+            T=q, select_number=select_number, mask=mask)
+        return index_q, index_shift_q, index_k, index_shift_k
+
+    def index_select_different_inverted(self, q, k, select_number, mask=None):
+        index_k, index_shift_k = self.func_select(
+            T=q, select_number=select_number, mask=mask)
+        index_q, index_shift_q = self.func_select(
+            T=k, select_number=select_number, mask=mask)
+        return index_q, index_shift_q, index_k, index_shift_k
 
     def step_selection(self, T, select_number, mask=None):
-        B, H, N, D = T.shape
+        with torch.no_grad():
+            B, H, N, D = T.shape
 
-        if N < select_number:
-            select_number = N
+            if N < select_number:
+                select_number = N
 
-        pas = N // select_number
+            pas = N // select_number
 
-        imax = pas * select_number
+            imax = pas * select_number
 
-        nt = torch.index_select(
-            T,
-            2,
-            torch.arange(0, imax, pas, device=T.device)
-        )
-
-        return nt, None
-
-    def k_causal_selection(self, T, select_number, mask=None):
-        B, H, N, D = T.shape
-        if N < select_number:
-            select_number = N
-
-        N2 = N
-
-        if N2 < select_number:
-            N2 = select_number
-
-        pas = N2 // select_number
-
-        imax = pas * select_number
-
-        nt = T[:, :, 0:imax:pas, :]
-
-        index = None
-
-        return nt, index
-
-    """def top_k_sum_selection(self, T, select_number, mask=None):
-        B, H, N, D = T.shape
-        device = T.device
-        #nt = torch.tensor((B, H, select_number, D), device=device)
-        #index = torch.tensor((B, H, select_number),dtype=torch.long, device=device)
-        # TODO clean le code
-        if self.select_type == "embed":
-            somme = T[:, :, 1:, 0]
-        elif self.select_type == "random":
-            somme = torch.rand(B, H, N - 1, device=device)
-        else:
-            somme = torch.sum((T[:, :, 1:, :].abs() if self.absolute else T[:, :, 1:, :]), -1)
-
-        if mask is not None:
-            somme = somme.masked_fill(
-                mask[:, None, 1:].to(torch.bool), -torch.finfo(somme.dtype).max)
-
-        top = torch.topk(input=somme, k=select_number - 1,
-                         dim=-1).indices + 1
-        top = torch.cat(
-            (top, torch.zeros(B, H, 1, device=device).int()), dim=-1)
-        index, _ = torch.sort(top, -1)
-        index_shift = einops.rearrange(index, 'b h n -> (b h n)')
-        shift = torch.arange(0, B * H * N, N, device=device)
-        shift = torch.repeat_interleave(shift, select_number)
-        index_shift = index_shift + shift
-        nt = torch.index_select(
-            einops.rearrange(T, 'b h n d -> (b h n) d'),
-            0,
-            index_shift
-        )
-        nt = einops.rearrange(nt, '(b h n) d -> b h n d',
-                              b=B, h=H, n=select_number)
-        return nt, index"""
+            index = torch.arange(0, imax, pas, device=T.device)
+            return index, index
 
     def top_k_sum_selection(self, T, select_number, mask=None):
         with torch.no_grad():
             B, H, N, D = T.shape
             device = T.device
-            # nt = torch.tensor((B, H, select_number, D), device=device)
-            # index = torch.tensor((B, H, select_number),dtype=torch.long, device=device)
-            # TODO clean le code
+
+            N2 = N
+
+            if self.cls_token:
+                T = T[:, :, 1:, :]
+                N2 = N - 1
+                if mask is not None:
+                    mask = mask[:, 1:]
+
             if self.select_type == "embed":
                 somme = T[:, :, :, 0]
             elif self.select_type == "random":
-                torch.randperm(N)
-                somme = torch.rand(B, H, N, device=device)
+                somme = torch.rand(B, H, N2, device=device)
             else:
                 somme = torch.sum((T.abs() if self.absolute else T), -1)
 
             if mask is not None:
                 somme = somme.masked_fill(
                     ~mask[:, None, :].to(torch.bool), -torch.finfo(somme.dtype).max)
-            index = torch.argsort(somme, dim=-1, descending=True)[:, :, :select_number]
+            index = torch.argsort(
+                somme, dim=-1, descending=True)[:, :, :select_number]
+            if self.cls_token:
+                index = index + 1
+                index[:, :, -1] = torch.tensor([0],
+                                               device=device).expand_as(index[:, :, -1])
             # index = torch.topk(input=somme, k=select_number,dim=-1).indices
             # index, _ = torch.sort(index, -1)
             index_shift = einops.rearrange(index, 'b h n -> (b h n)')
@@ -155,7 +134,18 @@ class CURAttention(nn.Module):
                               b=B, h=H, n=select_number)
         return nt
 
+    def submatrix_extraction_step(self, T, select_number, index_shift):
+
+        nt = torch.index_select(
+            T,
+            2,
+            index_shift
+        )
+
+        return nt
+
     def top_min_k_sum_selection(self, T, select_number, mask=None):
+        # TODO REPLACE
         with torch.no_grad():
             B, H, N, D = T.shape
             device = T.device
@@ -182,51 +172,14 @@ class CURAttention(nn.Module):
                               b=B, h=H, n=select_number)
         return nt, index
 
-    def causal_matrix_composition(self, C, R_indexes):
-        B, H, N, M = C.shape
-
-        if N < M:
-            N = M
-
-        pas = N // M
-
-        imax = pas * M
-
-        return torch.index_select(
-            C,
-            2,
-            torch.arange(0, imax, pas, device=C.device)
-        )
-
-        # return C[:, :, 0:imax:pas, :]
-
-    def m_matrix_composition(self, C, R_indexes):
-        with torch.no_grad():
-            B, H, N, M = C.shape
-            device = C.device
-            # nm = torch.tensor((B, H, M, M), device=device)
-            index_shift = einops.rearrange(R_indexes, 'b h n -> (b h n)')
-            shift = torch.arange(0, B * H * N, N, device=device)
-            shift = torch.repeat_interleave(shift, M)
-            index_shift = index_shift + shift
-        nm = torch.index_select(
-            einops.rearrange(C, 'b h n m -> (b h n) m'),
-            0,
-            index_shift
-        )
-        nm = einops.rearrange(
-            nm, '(b h m1) m2 -> b h m1 m2', b=B, h=H, m1=M, m2=M)
-        return nm
-
     def forward(self, Q, K, V, mask):
         B, H, N, D = Q.shape
         Q = Q / math.sqrt(self.head_dim)
 
-        index, index_shift = self.func_k_select(T=K, select_number=self.select_number, mask=mask)
-        #nr, r_index = self.func_q_select(T=Q, select_number=self.select_number, mask=mask)
+        index_q, shift_q, index_k, shift_k = self.index_select(Q, K, self.select_number, mask=mask)
 
-        nc = self.submatrix_extraction_rearrange(K, self.select_number, index_shift)
-        nr = self.submatrix_extraction_rearrange(Q, self.select_number, index_shift)
+        nc = self.submatrix_extraction(K, self.select_number, shift_k)
+        nr = self.submatrix_extraction(Q, self.select_number, shift_q)
 
         c = Q @ nc.transpose(-1, -2)
         r = nr @ K.transpose(-1, -2)
@@ -237,44 +190,40 @@ class CURAttention(nn.Module):
             -torch.finfo(Q.dtype).max
         )
 
-        kernel_1 = torch.nn.functional.softmax(
-            c, dim=-1
-        )
-        u = self.func_u_select(kernel_1, index)
-        kernel_3 = torch.nn.functional.softmax(
-            r, dim=-1
-        )
+        kernel_1 = torch.nn.functional.softmax(c, dim=-1)
+        u = self.submatrix_extraction(kernel_1, self.select_number, shift_q)
+        kernel_3 = torch.nn.functional.softmax(r, dim=-1)
         kernel_2_inv = self.iterative_inv(u)
 
         RV = torch.matmul(kernel_3, V)
 
-        X = torch.matmul(kernel_1, torch.matmul(
-            kernel_2_inv, RV))
+        X = torch.matmul(kernel_1, torch.matmul(kernel_2_inv, RV))
 
         if self.copy_rv:
             shift = torch.arange(0, B * H * N * D, N * D, device=Q.device)
             shift = torch.repeat_interleave(shift, self.select_number * D)
+            if self.select_type == 'step':
+                index_shift = ((torch.repeat_interleave(index_q * D, D)
+                                + torch.arange(D, device=Q.device)
+                                .expand(index_q.numel(), D).flatten())
+                               .expand(B * H, D * self.select_number).flatten() + shift)
+            else:
+                index_shift = (torch.repeat_interleave(index_q * D, D)
+                               + torch.arange(D, device=Q.device).expand(index_q.numel(), D).flatten() + shift)
 
-            index_shift = (torch.repeat_interleave(index * D, D)
-                           + torch.arange(D, device=Q.device).expand(index.numel(), D).flatten() + shift)
             X.put_(index_shift.reshape_as(RV), RV)
 
         return X
 
-    def iterative_inv(self, mat, n_iter=6):
+    def iterative_inv(self, mat):
         I = torch.eye(mat.size(-1), device=mat.device)
         K = mat
 
-        if self.init_option == "original":
-            V = 1 / torch.max(torch.sum(K, dim=-2)) * K.transpose(-1, -2)
-        else:
-            V = 1 / torch.max(torch.sum(K, dim=-2), dim=-
-            1).values[:, :, None, None] * K.transpose(-1, -2)
+        V = 1 / torch.max(torch.sum(K, dim=-2), dim=-1).values[:, :, None, None] * K.transpose(-1, -2)
 
-        for _ in range(n_iter):
+        for _ in range(self.num_iter):
             KV = torch.matmul(K, V)
-            V = torch.matmul(0.25 * V, 13 * I - torch.matmul(KV,
-                                                             15 * I - torch.matmul(KV, 7 * I - KV)))
+            V = torch.matmul(0.25 * V, 13 * I - torch.matmul(KV, 15 * I - torch.matmul(KV, 7 * I - KV)))
         return V
 
     def extra_repr(self):
