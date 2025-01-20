@@ -41,9 +41,9 @@ model_config = lra_config.config[task]["model"]
 model_config.update(lra_config.config[task]["extra_attn_config"][attn_type])
 
 init_t = time.time()
-date = time.strftime('%Y_%m_%d_%H_%M', time.gmtime())
+date = time.strftime('%Y_%m_%d_%H_%M_%S', time.gmtime())
 
-checkpoint_dir = f"../logs/{date}_{task}"
+checkpoint_dir = f"../logs/{task}_{date}"
 
 if attn_type == "curformer":
     model_config.update({
@@ -53,15 +53,22 @@ if attn_type == "curformer":
         "copy_rv": args.copy_rv,
         "num_iter": args.num_iter,
     })
-    checkpoint_dir = f"{checkpoint_dir}_curformer_{args.select_type}{args.select_number}" \
+    checkpoint_dir = f"{task}_curformer_{args.select_type}{args.select_number}" \
                      f"{args.select_mode if args.select_mode != 'default' else ''}" \
                      + (f"_CopyRV" if args.copy_rv else "") \
-                     + f"_{args.num_iter}Iter"
+                     + f"_{args.num_iter}Iter_{date}"
 
 os.makedirs(checkpoint_dir, exist_ok=True)
 log_f_path = os.path.join(checkpoint_dir, f"training.log")
+config_f_path = os.path.join(checkpoint_dir, f"config.log")
 checkpoint_file = os.path.join(checkpoint_dir, f"checkpoint.model")
 log_f = open(log_f_path, "a+")
+config_f = open(config_f_path, "a+")
+
+def print_and_log(msg):
+    print(msg, flush=True)
+    config_f.write(msg+"\n")
+    config_f.flush()
 
 model_config["mixed_precision"] = True
 model_config["attn_type"] = attn_type
@@ -72,18 +79,18 @@ gpu_memory_config = lra_config.config[task]["gpu_memory"]
 extra_config = lra_config.config[task]["extra_attn_config"]
 
 device_ids = list(range(torch.cuda.device_count()))
-print(f"GPU list: {device_ids}")
+print_and_log(f"GPU list: {device_ids}")
 
-print(json.dumps([model_config, training_config], indent=4))
+print_and_log(json.dumps([model_config, training_config], indent=4))
 
 if task == "retrieval":
     model = ModelForSCDual(model_config)
 else:
     model = ModelForSC(model_config)
 
-print(model)
-print(f"parameter_size: {[weight.size() for weight in model.parameters()]}", flush=True)
-print(f"num_parameter: {np.sum([np.prod(weight.size()) for weight in model.parameters()])}", flush=True)
+print_and_log(model)
+print_and_log(f"parameter_size: {[weight.size() for weight in model.parameters()]}")
+print_and_log(f"num_parameter: {np.sum([np.prod(weight.size()) for weight in model.parameters()])}")
 
 model = model.cuda()
 model = nn.DataParallel(model, device_ids=device_ids)
@@ -242,7 +249,7 @@ if args.skip_train == 0:
     except KeyboardInterrupt as e:
         print(e)
 
-checkpoint = torch.load(checkpoint_file, map_location="cpu")
+checkpoint = torch.load(checkpoint_file, map_location="cpu", weights_only=True)
 model.module.load_state_dict(checkpoint["model_state_dict"])
 model.eval()
 try:
