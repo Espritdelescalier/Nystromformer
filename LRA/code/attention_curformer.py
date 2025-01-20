@@ -16,7 +16,7 @@ class CURAttention(nn.Module):
         self.func_select = None
         self.submatrix_extraction = None
         self.absolute = False
-        self.copy_rv = "copy_rv" in config
+        self.copy_rv = config["copy_rv"] if "copy_rv" in config else True
         self.select_number = config["select_number"] if "select_number" in config else 64
         self.select_type = config["select_type"] if "select_type" in config else "random"
         self.num_iter = config["num_iter"] if "num_iter" in config else 4

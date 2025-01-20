@@ -54,7 +54,7 @@ config = {
             "reformer-2": {"attention_grad_checkpointing": False, "num_hash": 2},
             "performer-256": {"attention_grad_checkpointing": False, "rp_dim": 256, "kernel_type": "relu"},
             "linear": {"attention_grad_checkpointing": False},
-            "curformer": {"attention_grad_checkpointing": False, "select_number": 64, "select_type": "topmin"},
+            "curformer": {"attention_grad_checkpointing": False},
         }
     },
     "image": {
@@ -111,7 +111,7 @@ config = {
             "reformer-2": {"attention_grad_checkpointing": False, "num_hash": 2},
             "performer-256": {"attention_grad_checkpointing": False, "rp_dim": 256, "kernel_type": "relu"},
             "linear": {"attention_grad_checkpointing": False},
-            "curformer": {"attention_grad_checkpointing": False, "select_number": 64, "select_type": "topmin"},
+            "curformer": {"attention_grad_checkpointing": False},
         }
     },
     "pathfinder32": {
@@ -163,7 +163,7 @@ config = {
             "reformer-2": {"attention_grad_checkpointing": False, "num_hash": 2},
             "performer-256": {"attention_grad_checkpointing": False, "rp_dim": 256, "kernel_type": "relu"},
             "linear": {"attention_grad_checkpointing": False},
-            "curformer": {"attention_grad_checkpointing": False, "select_number": 64, "select_type": "sum", "copy_rv": 1},
+            "curformer": {"attention_grad_checkpointing": False},
         }
     },
     "retrieval": {
@@ -220,7 +220,7 @@ config = {
             "reformer-2": {"attention_grad_checkpointing": False, "num_hash": 2},
             "performer-256": {"attention_grad_checkpointing": False, "rp_dim": 256, "kernel_type": "relu"},
             "linear": {"attention_grad_checkpointing": False},
-            "curformer": {"attention_grad_checkpointing": False, "select_number": 64, "select_type": "topmin"},
+            "curformer": {"attention_grad_checkpointing": False},
         }
     },
     "text": {
@@ -277,7 +277,7 @@ config = {
             "reformer-2": {"attention_grad_checkpointing": False, "num_hash": 2},
             "performer-256": {"attention_grad_checkpointing": False, "rp_dim": 256, "kernel_type": "relu"},
             "linear": {"attention_grad_checkpointing": False},
-            "curformer": {"attention_grad_checkpointing": False, "select_number": 64, "select_type": "topmin"},
+            "curformer": {"attention_grad_checkpointing": False},
         }
     }
 }

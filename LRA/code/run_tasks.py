@@ -20,22 +20,51 @@ parser.add_argument("--task", type=str, help="task",
                     dest="task", required=True)
 parser.add_argument("--skip_train", type=int,
                     help="skip_train", dest="skip_train", default=0)
+parser.add_argument("--select_type", type=str, help="Cur selection type (random, step, abs, sum)",
+                    required=False, default="random")
+parser.add_argument("--select_mode", type=str, help="Cur selection mode (default, same_k, same_q)",
+                    required=False, default="default")
+parser.add_argument("--select_number", type=int, help="Cur selection number",
+                    required=False, default=64)
+parser.add_argument("--num_iter", type=int, help="Cur pseudo inverse num iterations",
+                    required=False, default=4)
+parser.add_argument("--copy_rv", type=bool, help="Cur enabling copy rv",
+                    required=False, default=True)
 args = parser.parse_args()
 
 attn_type = args.model
 task = args.task
 
-checkpoint_dir = "../logs/"
-
-print(lra_config.config[task]["extra_attn_config"].keys(), flush=True)
+# print(lra_config.config[task]["extra_attn_config"].keys(), flush=True)
 
 model_config = lra_config.config[task]["model"]
 model_config.update(lra_config.config[task]["extra_attn_config"][attn_type])
 
+init_t = time.time()
+date = time.strftime('%Y_%m_%d_%H_%M', time.gmtime())
+
+checkpoint_dir = f"../logs/{date}_{task}"
+
+if attn_type == "curformer":
+    model_config.update({
+        "select_number": args.select_number,
+        "select_type": args.select_type,
+        "select_mode": args.select_mode,
+        "copy_rv": args.copy_rv,
+        "num_iter": args.num_iter,
+    })
+    checkpoint_dir = f"{checkpoint_dir}_curformer_{args.select_type}{args.select_number}" \
+                     f"{args.select_mode if args.select_mode != 'default' else ''}" \
+                     + (f"_CopyRV" if args.copy_rv else "") \
+                     + f"_{args.num_iter}Iter"
+
+log_f_path = os.path.join(checkpoint_dir, f"training.log")
+checkpoint_file = os.path.join(checkpoint_dir, f"checkpoint.model")
+log_f = open(log_f_path, "a+")
+
 model_config["mixed_precision"] = True
 model_config["attn_type"] = attn_type
-model_config["max_seq_len"] = int(
-    2 ** math.ceil(math.log2(model_config["max_seq_len"])))
+model_config["max_seq_len"] = int(2 ** math.ceil(math.log2(model_config["max_seq_len"])))
 
 training_config = lra_config.config[task]["training"]
 gpu_memory_config = lra_config.config[task]["gpu_memory"]
@@ -52,18 +81,22 @@ else:
     model = ModelForSC(model_config)
 
 print(model)
-print(
-    f"parameter_size: {[weight.size() for weight in model.parameters()]}", flush=True)
-print(
-    f"num_parameter: {np.sum([np.prod(weight.size()) for weight in model.parameters()])}", flush=True)
+print(f"parameter_size: {[weight.size() for weight in model.parameters()]}", flush=True)
+print(f"num_parameter: {np.sum([np.prod(weight.size()) for weight in model.parameters()])}", flush=True)
 
 model = model.cuda()
 model = nn.DataParallel(model, device_ids=device_ids)
 
 ds_iter = {
-    "train": enumerate(DataLoader(LRADataset(f"../datasets/{task}.train.pickle", True), batch_size=training_config["batch_size"], drop_last=True)),
-    "dev": enumerate(DataLoader(LRADataset(f"../datasets/{task}.dev.pickle", True), batch_size=training_config["batch_size"], drop_last=True)),
-    "test": enumerate(DataLoader(LRADataset(f"../datasets/{task}.test.pickle", False), batch_size=training_config["batch_size"], drop_last=True)),
+    "train": enumerate(
+        DataLoader(LRADataset(f"../datasets/{task}.train.pickle", True), batch_size=training_config["batch_size"],
+                   drop_last=True)),
+    "dev": enumerate(
+        DataLoader(LRADataset(f"../datasets/{task}.dev.pickle", True), batch_size=training_config["batch_size"],
+                   drop_last=True)),
+    "test": enumerate(
+        DataLoader(LRADataset(f"../datasets/{task}.test.pickle", False), batch_size=training_config["batch_size"],
+                   drop_last=True)),
 }
 
 optimizer = torch.optim.AdamW(
@@ -105,7 +138,7 @@ def step(component, step_idx):
             partial_outputs = model(**partial_inputs)
             for key in partial_outputs:
                 partial_outputs[key] = partial_outputs[key].mean() / \
-                    accumu_steps
+                                       accumu_steps
                 if key not in outputs:
                     outputs[key] = partial_outputs[key]
                 else:
@@ -115,7 +148,7 @@ def step(component, step_idx):
         amp_scaler.step(optimizer)
         amp_scaler.update()
         lr_scheduler.step()
-        #print(torch.cuda.max_memory_allocated("cuda:0"))
+        # print(torch.cuda.max_memory_allocated("cuda:0"))
     else:
         with torch.no_grad():
             outputs = {}
@@ -129,7 +162,7 @@ def step(component, step_idx):
                 partial_outputs = model(**partial_inputs)
                 for key in partial_outputs:
                     partial_outputs[key] = partial_outputs[key].mean() / \
-                        accumu_steps
+                                           accumu_steps
                     if key not in outputs:
                         outputs[key] = partial_outputs[key]
                     else:
@@ -144,7 +177,9 @@ def step(component, step_idx):
     accu = outputs["accu"].data.item()
     time_since_start = time.time() - init_t
 
-    print(f"step={step_idx}, tt={time_since_start:.1f}, t={t_escape:.3f}, bs={batch_size}, lr={learning_rate:.6f}, loss={loss:.4f}, accu={accu:.4f}\t\t\t\t", end="\r", flush=True)
+    print(
+        f"step={step_idx}, tt={time_since_start:.1f}, t={t_escape:.3f}, bs={batch_size}, lr={learning_rate:.6f}, loss={loss:.4f}, accu={accu:.4f}\t\t\t\t",
+        end="\r", flush=True)
 
     summary[component]["t"] += t_escape
     summary[component]["loss"].append(loss)
@@ -161,7 +196,7 @@ def print_summary(summary, save_if_improved, train_step_idx):
         if save_if_improved:
             best_accu = summary["best_accu"]
             torch.save({"model_state_dict": model.module.state_dict()},
-                       log_f_path.replace(".log", ".model"))
+                       checkpoint_file)
             print(f"best_accu={best_accu}. Saved best model")
 
     summary_round = {"train_step_idx": train_step_idx}
@@ -179,16 +214,6 @@ def print_summary(summary, save_if_improved, train_step_idx):
     summary["loss"] = []
     summary["accu"] = []
 
-
-init_t = time.time()
-date = time.strftime('%Y_%m_%d_%H_%M', time.gmtime())
-select_cur = extra_config["curformer"]["select_type"]
-copy_rv = "_RV" if "copy_rv" in extra_config["curformer"] else ""
-print(select_cur)
-print(copy_rv)
-log_f_path = os.path.join(
-    checkpoint_dir, f"{date}_{task}_{attn_type}_{select_cur}{copy_rv}_SameSelectOnK.log")
-log_f = open(log_f_path, "a+")
 
 summary = {
     component: {"t": 0, "loss": [], "accu": [],
@@ -216,8 +241,7 @@ if args.skip_train == 0:
     except KeyboardInterrupt as e:
         print(e)
 
-checkpoint = torch.load(log_f_path.replace(
-    ".log", ".model"), map_location="cpu")
+checkpoint = torch.load(checkpoint_file, map_location="cpu")
 model.module.load_state_dict(checkpoint["model_state_dict"])
 model.eval()
 try:
