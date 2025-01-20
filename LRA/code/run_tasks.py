@@ -58,6 +58,7 @@ if attn_type == "curformer":
                      + (f"_CopyRV" if args.copy_rv else "") \
                      + f"_{args.num_iter}Iter"
 
+os.makedirs(checkpoint_dir, exist_ok=True)
 log_f_path = os.path.join(checkpoint_dir, f"training.log")
 checkpoint_file = os.path.join(checkpoint_dir, f"checkpoint.model")
 log_f = open(log_f_path, "a+")
