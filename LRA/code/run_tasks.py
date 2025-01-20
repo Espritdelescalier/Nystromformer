@@ -88,7 +88,7 @@ if task == "retrieval":
 else:
     model = ModelForSC(model_config)
 
-print_and_log(model)
+print_and_log(str(model))
 print_and_log(f"parameter_size: {[weight.size() for weight in model.parameters()]}")
 print_and_log(f"num_parameter: {np.sum([np.prod(weight.size()) for weight in model.parameters()])}")
 
