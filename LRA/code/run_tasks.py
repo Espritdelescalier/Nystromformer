@@ -53,7 +53,7 @@ if attn_type == "curformer":
         "copy_rv": args.copy_rv,
         "num_iter": args.num_iter,
     })
-    checkpoint_dir = f"{task}_curformer_{args.select_type}{args.select_number}" \
+    checkpoint_dir = f"../logs/{task}_curformer_{args.select_type}{args.select_number}" \
                      f"{args.select_mode if args.select_mode != 'default' else ''}" \
                      + (f"_CopyRV" if args.copy_rv else "") \
                      + f"_{args.num_iter}Iter_{date}"
