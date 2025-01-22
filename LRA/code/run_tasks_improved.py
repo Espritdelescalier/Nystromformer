@@ -37,8 +37,8 @@ task = args.task
 
 # print(lra_config.config[task]["extra_attn_config"].keys(), flush=True)
 
-model_config = lra_config.config[task]["model"]
-model_config.update(lra_config.config[task]["extra_attn_config"][attn_type])
+model_config = lra_config_improved.config[task]["model"]
+model_config.update(lra_config_improved.config[task]["extra_attn_config"][attn_type])
 
 init_t = time.time()
 date = time.strftime('%Y_%m_%d_%H_%M_%S', time.gmtime())
@@ -74,9 +74,9 @@ model_config["mixed_precision"] = True
 model_config["attn_type"] = attn_type
 model_config["max_seq_len"] = int(2 ** math.ceil(math.log2(model_config["max_seq_len"])))
 
-training_config = lra_config.config[task]["training"]
-gpu_memory_config = lra_config.config[task]["gpu_memory"]
-extra_config = lra_config.config[task]["extra_attn_config"]
+training_config = lra_config_improved.config[task]["training"]
+gpu_memory_config = lra_config_improved.config[task]["gpu_memory"]
+extra_config = lra_config_improved.config[task]["extra_attn_config"]
 
 device_ids = list(range(torch.cuda.device_count()))
 print_and_log(f"GPU list: {device_ids}")
