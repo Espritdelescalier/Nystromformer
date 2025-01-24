@@ -28,8 +28,8 @@ parser.add_argument("--select_number", type=int, help="Cur selection number",
                     required=False, default=64)
 parser.add_argument("--num_iter", type=int, help="Cur pseudo inverse num iterations",
                     required=False, default=4)
-parser.add_argument("--copy_rv", type=bool, help="Cur enabling copy rv",
-                    required=False, default=True)
+parser.add_argument("--no_copy_rv", type=bool, help="Cur desabling copy rv",
+                    required=False, action="store_false", default=True, dest="copy_rv")
 args = parser.parse_args()
 
 attn_type = args.model
